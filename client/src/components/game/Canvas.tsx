@@ -2,14 +2,16 @@ import { useEffect, useRef } from 'react';
 import { Bird } from './Bird';
 import { Pipe } from './Pipe';
 import { gameConfig } from '../../lib/game';
+import { useRecoilState, useSetRecoilState } from 'recoil';
+import { scoreAtom } from '@/store/atoms/game';
 
 interface CanvasProps {
   isPlaying: boolean;
-  onScore: (score: number) => void;
   onGameOver: (score: number) => void;
 }
 
-export function Canvas({ isPlaying, onScore, onGameOver }: CanvasProps) {
+export function Canvas({ isPlaying, onGameOver }: CanvasProps) {
+  const [score, setScore] = useRecoilState(scoreAtom);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<{
     bird: Bird;
@@ -62,7 +64,7 @@ export function Canvas({ isPlaying, onScore, onGameOver }: CanvasProps) {
         if (!pipe.passed && pipe.x + pipe.width < game.bird.x) {
           pipe.passed = true;
           game.score++;
-          onScore(game.score);
+          setScore(game.score);
         }
 
         return pipe.x + pipe.width > 0;
@@ -76,6 +78,7 @@ export function Canvas({ isPlaying, onScore, onGameOver }: CanvasProps) {
       const collision = game.pipes.some(pipe => pipe.checkCollision(game.bird));
       if (collision || game.bird.y > canvas.height || game.bird.y < 0) {
         onGameOver(game.score);
+        setScore(0);
         return;
       }
 
@@ -89,7 +92,7 @@ export function Canvas({ isPlaying, onScore, onGameOver }: CanvasProps) {
     return () => {
       cancelAnimationFrame(game.animationFrame);
     };
-  }, [isPlaying, onScore, onGameOver]);
+  }, [isPlaying, onGameOver]);
 
   return (
     <canvas

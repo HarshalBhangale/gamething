@@ -3,6 +3,31 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { gameConfig } from '../../lib/game';
 
+declare global {
+  interface Window {
+    Hands: new (config?: {
+      locateFile?: (file: string) => string;
+    }) => {
+      setOptions: (options: {
+        maxNumHands?: number;
+        modelComplexity?: number;
+        minDetectionConfidence?: number;
+        minTrackingConfidence?: number;
+      }) => Promise<void>;
+      onResults: (callback: (results: {
+        multiHandLandmarks?: Array<Array<{
+          x: number;
+          y: number;
+          z: number;
+        }>>;
+      }) => void) => void;
+      initialize: () => Promise<void>;
+      send: (config: { image: HTMLVideoElement }) => Promise<void>;
+      close: () => void;
+    };
+  }
+}
+
 export function HandTracking() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);

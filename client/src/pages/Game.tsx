@@ -8,7 +8,6 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function Game() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const { toast } = useToast();
   
@@ -33,7 +32,6 @@ export default function Game() {
   };
 
   const startGame = () => {
-    setScore(0);
     setIsPlaying(true);
   };
 
@@ -43,13 +41,12 @@ export default function Game() {
         <div className="relative">
           <Canvas 
             isPlaying={isPlaying}
-            onScore={(s) => setScore(s)}
             onGameOver={handleGameOver}
           />
           <HandTracking />
           
           <div className="absolute top-4 right-4">
-            <Score current={score} high={highScore} />
+            <Score high={highScore} />
           </div>
           
           {!isPlaying && (
@@ -66,7 +63,7 @@ export default function Game() {
                   onClick={startGame}
                   className="bg-primary hover:bg-primary/90"
                 >
-                  {score > 0 ? 'Play Again' : 'Start Game'}
+                  Start Game
                 </Button>
               </div>
             </div>
