@@ -1,47 +1,69 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera } from '@mediapipe/camera_utils';
-import { Hands } from '@mediapipe/hands';
-import { gameConfig } from '../../lib/game';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { gameConfig } from '../../lib/game';
 
 export function HandTracking() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const handTrackingRef = useRef<{ camera?: Camera; hands?: Hands }>({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const handsRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    async function initializeHandTracking() {
-      if (!videoRef.current) return;
+    const initializeHandTracking = async () => {
+      if (!videoRef.current || !isMounted) return;
 
       try {
+        console.log('Starting hand tracking initialization...');
         setIsLoading(true);
 
-        // Create Hands instance with explicit solution path
-        const hands = new Hands({
-          locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+        // Load MediaPipe scripts
+        const handsScript = document.createElement('script');
+        handsScript.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+        await new Promise((resolve) => {
+          handsScript.onload = resolve;
+          document.body.appendChild(handsScript);
+        });
+
+        // Request camera access
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: 640,
+            height: 480,
+            facingMode: 'user'
           }
         });
 
-        // Wait for MediaPipe to be ready
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!isMounted) return;
+        
+        videoRef.current.srcObject = stream;
+        await new Promise<void>((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = () => resolve();
+          }
+        });
 
-        // Configure hands with more conservative settings
-        hands.setOptions({
+        // Initialize MediaPipe Hands
+        const hands = new window.Hands({
+          locateFile: (file: string) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+          }
+        });
+
+        handsRef.current = hands;
+
+        await hands.setOptions({
           maxNumHands: 1,
           modelComplexity: 0,
           minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-          selfieMode: true
+          minTrackingConfidence: 0.5
         });
 
-        // Setup result handler
-        hands.onResults((results) => {
+        hands.onResults((results: any) => {
           if (results.multiHandLandmarks?.[0]) {
             const indexFinger = results.multiHandLandmarks[0][8];
             if (indexFinger) {
@@ -53,77 +75,67 @@ export function HandTracking() {
           }
         });
 
-        // Initialize hands first
         await hands.initialize();
+        console.log('Hands model initialized successfully');
 
-        if (!isMounted) return;
-
-        // Request camera permissions first
-        await navigator.mediaDevices.getUserMedia({ video: true });
-
-        // Create and start camera
+        // Initialize camera after hands are ready
+        const { Camera } = await import('@mediapipe/camera_utils');
         const camera = new Camera(videoRef.current, {
           onFrame: async () => {
-            if (videoRef.current && handTrackingRef.current.hands) {
-              try {
-                await handTrackingRef.current.hands.send({ image: videoRef.current });
-              } catch (err) {
-                // Silently handle frame processing errors
-                if (!err.message?.includes('Input frame is empty')) {
-                  console.warn('Frame processing error:', err);
-                }
-              }
+            if (!videoRef.current || !handsRef.current) return;
+            try {
+              await handsRef.current.send({ image: videoRef.current });
+            } catch (error) {
+              console.error('Frame processing error:', error);
             }
           },
           width: 640,
           height: 480
         });
 
-        // Store references
-        handTrackingRef.current = { hands, camera };
-
-        // Start camera
+        cameraRef.current = camera;
         await camera.start();
-        
+        console.log('Camera started successfully');
+
         if (isMounted) {
           setIsInitialized(true);
           setIsLoading(false);
-          
           toast({
-            title: "Ready to play!",
-            description: "Move your hand up and down to control the bird",
-            duration: 5000,
+            title: "Hand tracking ready",
+            description: "Move your index finger to control the bird",
           });
         }
+
       } catch (error) {
         console.error('Hand tracking initialization error:', error);
         if (isMounted) {
           setIsLoading(false);
+          setIsInitialized(false);
           toast({
-            title: "Camera access needed",
-            description: "Please allow camera access to play with hand controls",
+            title: "Hand tracking failed",
+            description: "Please ensure camera permissions are granted and refresh the page",
             variant: "destructive",
-            duration: 5000,
           });
         }
       }
-    }
+    };
 
-    // Initialize tracking
     initializeHandTracking();
 
-    // Cleanup function
     return () => {
       isMounted = false;
-      const { camera, hands } = handTrackingRef.current;
-      if (camera) {
-        camera.stop();
+      if (cameraRef.current) {
+        cameraRef.current.stop();
       }
-      if (hands) {
-        hands.close();
+      if (handsRef.current) {
+        handsRef.current.close();
+      }
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => track.stop());
       }
     };
-  }, [toast]);
+  }, []);
 
   return (
     <div className="fixed bottom-4 left-4 w-32 h-24 overflow-hidden rounded-lg bg-black/20 backdrop-blur-sm border border-primary/20">
@@ -134,9 +146,8 @@ export function HandTracking() {
           isInitialized ? "opacity-50" : "opacity-25"
         )}
         playsInline
-        muted
         autoPlay
-        style={{ transform: 'scaleX(-1)' }}
+        muted
       />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-primary animate-pulse">
